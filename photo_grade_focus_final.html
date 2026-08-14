@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>photo_grade</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --ink: #1a1a1a;
+    --dim: #8f8a80;
+    --amber: #b45309;
+    --amber-hi: #d97706;
+    --hot: #cc4125;
+    --ref: #1f6fd6;
+    --border: #dfdad0;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Space Mono", ui-monospace, monospace;
+    background: var(--bg);
+    color: var(--ink);
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 44px 24px 90px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  ::selection { background: var(--amber); color: white; }
+
+  /* ---------- page load cascade ---------- */
+  .load-in { opacity: 0; animation: loadIn .65s ease forwards; }
+  @keyframes loadIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+  /* sticky element: fade only, so it can't lose its stickiness mid-transform */
+  #controls.load-in { animation-name: loadFade; }
+  @keyframes loadFade { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ---------- header ---------- */
+  h1.masthead {
+    font-family: "Space Mono", monospace;
+    font-weight: 700;
+    font-size: 24px;
+    margin: 0 0 24px;
+    text-align: center;
+    letter-spacing: -.01em;
+    position: relative;
+  }
+  #fxCanvas {
+    position: absolute;
+    left: -120px; top: -120px;
+    width: calc(100% + 240px);
+    height: calc(100% + 240px);
+    pointer-events: none;
+    z-index: 5;
+  }
+  h1.masthead .cursor {
+    display: inline-block; width: 10px; height: 18px;
+    background: var(--amber); vertical-align: -3px; margin-left: 2px;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- pixel shine sweep on the title ---------- */
+  .shine { position: relative; display: inline-block; }
+  .shine::after {
+    content: attr(data-text);
+    position: absolute; left: 0; top: 0;
+    white-space: pre;
+    color: transparent;
+    pointer-events: none;
+    opacity: 0;
+    background-image: var(--shine-img);
+    background-size: 320% 100%;
+    background-repeat: no-repeat;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    /* keep the dither squares hard-edged when scaled up */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  /* 100% -> 0% is the full, reliable travel range for an oversized
+     background, and it moves the band left-to-right across the text.
+     Duration matches the demo strip's 1.1s reorder. */
+  .shine.sweep::after { animation: shineSweep .95s steps(21, end) 1; }
+  @keyframes shineSweep {
+    0%   { background-position: 100% 0; opacity: 1; }
+    99%  { background-position: 0% 0;   opacity: 1; }
+    100% { background-position: 0% 0;   opacity: 0; }
+  }
+
+  /* ---------- demo strip ---------- */
+  #demo {
+    position: relative; height: 40px;
+    border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+  }
+  #demo .blk { position: absolute; top: 0; height: 100%; transition: left 1.7s cubic-bezier(.5,0,.2,1); }
+  #demoLabel { color: var(--dim); font-size: 11px; margin: 8px 0 0; min-height: 15px; }
+  #demoLabel::before { content: "> "; color: var(--amber); }
+  .demofig { margin-bottom: 36px; }
+
+  /* ---------- section headings ---------- */
+  .panel-title {
+    color: var(--dim); font-size: 11px; letter-spacing: .08em;
+    text-transform: uppercase; margin: 0 0 10px;
+  }
+  .panel-title b { color: var(--amber); font-weight: 700; }
+  .panel { margin-bottom: 30px; }
+
+  /* ---------- drop zone ---------- */
+  #drop {
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 30px 16px;
+    text-align: center;
+    color: var(--dim);
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  #drop:hover, #drop.over { border-color: var(--amber); color: var(--amber); }
+
+  /* ---------- controls ---------- */
+  #controls {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--bg);
+    padding: 10px 0 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+  }
+  .ctl-row { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+  .ctl { min-width: 150px; flex: 1; }
+  .ctl .lbl { color: var(--dim); font-size: 11px; display: flex; justify-content: space-between; }
+  .ctl .lbl input[type=number] {
+    width: 54px; background: none; border: none; border-bottom: 1px solid var(--border);
+    color: var(--amber); font: inherit; font-size: 11px; text-align: right; padding: 0 1px;
+  }
+  .ctl .lbl input[type=number]:focus { outline: none; border-color: var(--amber); }
+  /* typewriter tick: digits scramble briefly, then settle on the real value */
+  .ctl .lbl input[type=number].ticking { color: var(--amber-hi); }
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 16px; margin: 4px 0 0;
+    background: repeating-linear-gradient(90deg, var(--border) 0 6px, transparent 6px 9px);
+    background-size: 100% 6px; background-position: 0 5px; background-repeat: no-repeat;
+    cursor: ew-resize;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 9px; height: 16px;
+    background: var(--amber);
+    border: none; border-radius: 1px;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 9px; height: 16px; background: var(--amber);
+    border: none; border-radius: 1px;
+  }
+  input[type=range]:focus { outline: none; }
+  input[type=range]:focus::-webkit-slider-thumb { outline: 1px solid var(--ink); }
+
+  select, button {
+    font: inherit; font-size: 12px;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--border); border-radius: 3px;
+    padding: 5px 10px; cursor: pointer;
+  }
+  select:hover { border-color: var(--amber); color: var(--amber); }
+  button:active { transform: translateY(1px); }
+
+  /* ---------- action buttons: centered + prominent ---------- */
+  .actions { display: flex; justify-content: center; gap: 14px; margin-top: 14px; }
+  .actions button {
+    font-weight: 700; border-radius: 4px; padding: 9px 22px;
+    transition: background .15s, color .15s;
+  }
+  #dlBtn { background: var(--amber); color: white; border: 1px solid var(--amber); }
+  #dlBtn:hover { background: var(--amber-hi); border-color: var(--amber-hi); }
+  #clrBtn { background: none; color: var(--hot); border: 1px solid var(--hot); }
+  #clrBtn:hover { background: var(--hot); color: white; }
+
+  #status { color: var(--dim); font-size: 11px; margin-top: 8px; min-height: 15px; text-align: center; }
+  #status::before { content: "> "; color: var(--amber); }
+
+  /* ---------- strips ---------- */
+  .striplabel { color: var(--dim); font-size: 11px; margin: 8px 0 2px; }
+  .strip { display: flex; height: 30px; border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+  .strip div { flex: 1; }
+
+  /* ---------- grid ---------- */
+  #grid { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+  .cell { width: 140px; cursor: pointer; animation: rise .25s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  .cell canvas, .cell img {
+    width: 140px; height: 140px; object-fit: cover; display: block;
+    border: 1px solid var(--border); border-radius: 3px;
+    transition: border-color .15s;
+    -webkit-touch-callout: none; -webkit-user-drag: none;
+  }
+  .cell:hover canvas, .cell:hover img { border-color: var(--amber); }
+  .cell.edited canvas, .cell.edited img { border-color: var(--hot); }
+  .cell.reference canvas, .cell.reference img { border-color: var(--ref); }
+  .cell .bars { display: flex; height: 8px; margin-top: 4px; border-radius: 3px; overflow: hidden; border: 1px solid var(--border); }
+  .cell .bars div { flex: 1; }
+  .cell .info { margin-top: 4px; color: var(--dim); font-size: 10px; }
+  .cell .tag { color: var(--hot); }
+  .cell .tag.ref { color: var(--ref); }
+
+  /* ---------- carousel ---------- */
+  #carouselWrap {
+    margin-top: 8px; border: 1px solid var(--border); border-radius: 4px;
+    overflow: hidden; background: #000;
+    cursor: grab; touch-action: none; user-select: none;
+  }
+  #carouselWrap:active { cursor: grabbing; }
+  #track { display: flex; height: 320px; will-change: transform; backface-visibility: hidden; }
+  #track img {
+    height: 320px; display: block; flex: 0 0 auto;
+    object-fit: cover; -webkit-user-drag: none;
+    -webkit-touch-callout: none;
+  }
+  .hint { font-size: 11px; color: var(--dim); margin-top: 6px; text-align: center; }
+
+  /* ---------- lightbox ---------- */
+  #lightbox {
+    position: fixed; inset: 0; z-index: 90;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(20, 20, 20, .62);      /* softer than a full blackout */
+    backdrop-filter: blur(2px);
+    padding: 40px;
+    cursor: zoom-out;
+    opacity: 0;
+    transition: opacity .22s ease;
+  }
+  #lightbox.open { display: flex; }
+  #lightbox.shown { opacity: 1; }
+  #lightbox img {
+    max-width: min(92vw, 1100px);
+    max-height: 86vh;
+    display: block;
+    border-radius: 4px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.45);
+    transform: scale(.97);
+    transition: transform .22s ease;
+    cursor: default;
+  }
+  #lightbox.shown img { transform: scale(1); }
+  #lbCaption {
+    position: absolute; bottom: 18px; left: 0; right: 0;
+    text-align: center; color: rgba(255,255,255,.8);
+    font-size: 11px; pointer-events: none;
+  }
+  #lbClose {
+    position: absolute; top: 14px; right: 18px;
+    color: rgba(255,255,255,.75); font-size: 20px;
+    background: none; border: none; cursor: pointer; padding: 6px 10px;
+  }
+  #lbClose:hover { color: #fff; }
+
+  /* nav arrows */
+  .lbNav {
+    position: absolute; top: 50%;
+    width: 44px; height: 60px;
+    margin-top: -30px;                 /* centre without a transform */
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; padding: 0;
+    cursor: pointer;
+    opacity: .6;
+    transition: opacity .15s ease;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+    z-index: 2;
+  }
+  .lbNav svg { display: block; }
+  .lbNav:hover { opacity: 1; }
+  .lbNav:focus { outline: none; }
+  #lbPrev { left: 10px; }
+  #lbNext { right: 10px; }
+  #lbCount {
+    position: absolute; top: 16px; left: 0; right: 0;
+    text-align: center; color: rgba(255,255,255,.6);
+    font-size: 11px; pointer-events: none;
+  }
+
+  /* ---------- context menu ---------- */
+  #ctxMenu {
+    position: fixed; z-index: 100;
+    background: var(--panel);
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+    box-shadow: 2px 3px 0 rgba(0,0,0,.12);
+    padding: 4px;
+    min-width: 170px;
+    display: none;
+    font-size: 12px;
+  }
+  #ctxMenu.open { display: block; animation: ctxIn .12s ease; }
+  @keyframes ctxIn { from { opacity: 0; transform: translateY(-4px); } }
+  #ctxMenu .ctxhead {
+    color: var(--dim); font-size: 10px; padding: 4px 8px 6px;
+    border-bottom: 1px solid var(--border); margin-bottom: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #ctxMenu button {
+    display: block; width: 100%; text-align: left;
+    background: none; border: none; border-radius: 3px;
+    padding: 7px 8px; font: inherit; font-size: 12px;
+    color: var(--ink); cursor: pointer;
+  }
+  #ctxMenu button:hover { background: var(--amber); color: white; }
+  #ctxMenu button .k { color: var(--dim); float: right; }
+  #ctxMenu button:hover .k { color: white; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #demo .blk { transition: none; }
+    .cell { animation: none; }
+    .load-in { opacity: 1; animation: none; }
+    h1.masthead .cursor { animation: none; }
+    .shine.sweep::after { animation: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<h1 class="masthead"><span class="shine" id="titleShine" data-text="photo_grade">photo_grade</span><canvas id="fxCanvas"></canvas></h1>
+
+<div class="demofig">
+  <div id="demo"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-title"><b>01</b> Load</div>
+  <div id="drop">drop images here, or click to choose files</div>
+  <input type="file" id="file" accept="image/*" multiple style="display:none">
+</div>
+
+<div id="controls">
+  <div class="ctl-row">
+    <div class="ctl" style="min-width:120px">
+      <div class="lbl">extract</div>
+      <select id="mode" style="width:100%;margin-top:4px">
+        <option value="average">average</option>
+        <option value="dominant">dominant</option>
+      </select>
+    </div>
+    <div class="ctl">
+      <div class="lbl">smoothing <input type="number" id="sigmaN" min="0.6" max="4" step="0.1" value="1.6"></div>
+      <input type="range" id="sigma" min="0.6" max="4" step="0.1" value="1.6">
+    </div>
+    <div class="ctl">
+      <div class="lbl">sensitivity <input type="number" id="threshN" min="0.005" max="0.12" step="0.005" value="0.035"></div>
+      <input type="range" id="thresh" min="0.005" max="0.12" step="0.005" value="0.035">
+    </div>
+    <div class="ctl">
+      <div class="lbl">strength <input type="number" id="strengthN" min="0" max="1" step="0.05" value="0.8"></div>
+      <input type="range" id="strength" min="0" max="1" step="0.05" value="0.8">
+    </div>
+    <div class="ctl">
+      <div class="lbl">reference pull <input type="number" id="refPullN" min="0" max="1" step="0.05" value="0.6"></div>
+      <input type="range" id="refPull" min="0" max="1" step="0.05" value="0.6">
+    </div>
+  </div>
+  <div class="actions">
+    <button id="dlBtn" onclick="downloadAll()">↓ download edited</button>
+    <button id="clrBtn" onclick="reset()">clear all</button>
+  </div>
+  <div id="status">waiting for images</div>
+</div>
+
+<div id="strips"></div>
+<div id="grid"></div>
+
+<div class="panel-title" id="carouselTitle" style="margin-top:26px"><b>04</b> Carousel</div>
+<div id="carouselWrap"><div id="track"></div></div>
+<div class="hint">hover + scroll, or click and drag · long-press (or right-click) any photo for options</div>
+
+<div id="lightbox">
+  <button id="lbClose" aria-label="close">&times;</button>
+  <img id="lbImg" alt="">
+  <div id="lbCaption"></div>
+  <div id="lbCount"></div>
+  <button class="lbNav" id="lbPrev" aria-label="previous">
+    <svg width="22" height="34" viewBox="0 0 22 34" fill="none" aria-hidden="true">
+      <path d="M17 4 L6 17 L17 30" stroke="#fff" stroke-width="3"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <button class="lbNav" id="lbNext" aria-label="next">
+    <svg width="22" height="34" viewBox="0 0 22 34" fill="none" aria-hidden="true">
+      <path d="M5 4 L16 17 L5 30" stroke="#fff" stroke-width="3"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+</div>
+
+<div id="ctxMenu"></div>
+
+
+<script>
+'use strict';
+
+// ================= color space =================
+
+function srgbToLinear(c) {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+function linearToSrgb(c) {
+  return c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(Math.max(c, 0), 1 / 2.4) - 0.055;
+}
+
+function rgbToOklab(r, g, b) {
+  r = srgbToLinear(r); g = srgbToLinear(g); b = srgbToLinear(b);
+  const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+  const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+  const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+  const l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+  return [
+    0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+    1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+    0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+  ];
+}
+
+function oklabToRgb(L, a, b) {
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  return [
+    linearToSrgb( 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+  ];
+}
+
+function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
+
+function toHex(rgb) {
+  const f = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+  return '#' + f(rgb[0]) + f(rgb[1]) + f(rgb[2]);
+}
+
+// ================= extraction =================
+
+const SAMPLE = 64;
+const MAXEDIT = 900;
+
+function samplePixels(img) {
+  const cv = document.createElement('canvas');
+  cv.width = SAMPLE; cv.height = SAMPLE;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, SAMPLE, SAMPLE);
+  const d = ctx.getImageData(0, 0, SAMPLE, SAMPLE).data;
+  const px = [];
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 128) continue;
+    px.push([d[i] / 255, d[i + 1] / 255, d[i + 2] / 255]);
+  }
+  return px;
+}
+
+// Precompute the edit-resolution OKLab pixels ONCE per image.
+// This is the core performance fix: grading used to re-convert every
+// pixel RGB->OKLab on every slider tick; now that happens a single
+// time at upload.
+function precomputeEditLab(img) {
+  const scale = Math.min(1, MAXEDIT / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const lab = new Float32Array(w * h * 3);
+  for (let i = 0, j = 0; i < d.length; i += 4, j += 3) {
+    const o = rgbToOklab(d[i] / 255, d[i + 1] / 255, d[i + 2] / 255);
+    lab[j] = o[0]; lab[j + 1] = o[1]; lab[j + 2] = o[2];
+  }
+  return { lab, w, h };
+}
+
+function averageColor(px) {
+  let r = 0, g = 0, b = 0;
+  for (const p of px) { r += srgbToLinear(p[0]); g += srgbToLinear(p[1]); b += srgbToLinear(p[2]); }
+  const n = px.length || 1;
+  return [linearToSrgb(r / n), linearToSrgb(g / n), linearToSrgb(b / n)];
+}
+
+function dominantColor(px, k = 5, iters = 12) {
+  const labs = px.map(p => rgbToOklab(p[0], p[1], p[2]));
+  let cent = [];
+  for (let i = 0; i < k; i++) cent.push(labs[Math.floor(labs.length * i / k)]);
+  let assign = new Array(labs.length).fill(0);
+  for (let it = 0; it < iters; it++) {
+    for (let i = 0; i < labs.length; i++) {
+      let best = 0, bd = Infinity;
+      for (let c = 0; c < k; c++) { const d = dist(labs[i], cent[c]); if (d < bd) { bd = d; best = c; } }
+      assign[i] = best;
+    }
+    const sums = Array.from({length: k}, () => [0, 0, 0, 0]);
+    for (let i = 0; i < labs.length; i++) {
+      const s = sums[assign[i]];
+      s[0] += labs[i][0]; s[1] += labs[i][1]; s[2] += labs[i][2]; s[3]++;
+    }
+    for (let c = 0; c < k; c++) if (sums[c][3])
+      cent[c] = [sums[c][0] / sums[c][3], sums[c][1] / sums[c][3], sums[c][2] / sums[c][3]];
+  }
+  const counts = new Array(k).fill(0);
+  for (const a of assign) counts[a]++;
+  let best = 0, bestScore = -1;
+  for (let c = 0; c < k; c++) {
+    const chroma = Math.hypot(cent[c][1], cent[c][2]);
+    const score = counts[c] * (1 + chroma * 3);
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  const members = [];
+  for (let i = 0; i < px.length; i++) if (assign[i] === best) members.push(px[i]);
+  return averageColor(members.length ? members : px);
+}
+
+// ================= ordering =================
+
+function nearestNeighborPath(D, start, n) {
+  const unvisited = new Set([...Array(n).keys()].filter(i => i !== start));
+  const path = [start];
+  while (unvisited.size) {
+    const last = path[path.length - 1];
+    let best = -1, bd = Infinity;
+    for (const j of unvisited) if (D[last][j] < bd) { bd = D[last][j]; best = j; }
+    path.push(best); unvisited.delete(best);
+  }
+  return path;
+}
+
+function twoOpt(path, D, maxPasses = 60) {
+  path = path.slice();
+  const n = path.length;
+  let improved = true, passes = 0;
+  while (improved && passes < maxPasses) {
+    improved = false; passes++;
+    outer:
+    for (let i = 0; i < n - 2; i++) {
+      const a = path[i], b = path[i + 1];
+      for (let k = i + 2; k < n - 1; k++) {
+        const c = path[k], d = path[k + 1];
+        if (D[a][c] + D[b][d] < D[a][b] + D[c][d] - 1e-12) {
+          const seg = path.slice(i + 1, k + 1).reverse();
+          path.splice(i + 1, seg.length, ...seg);
+          improved = true; break outer;
+        }
+      }
+    }
+  }
+  return path;
+}
+
+function fitTargets(labs, sigma) {
+  const n = labs.length;
+  const targets = [];
+  for (let i = 0; i < n; i++) {
+    let wsum = 0, acc = [0, 0, 0];
+    for (let j = 0; j < n; j++) {
+      if (j === i) continue;
+      const d = i - j;
+      const w = Math.exp(-(d * d) / (2 * sigma * sigma));
+      wsum += w;
+      acc[0] += w * labs[j][0]; acc[1] += w * labs[j][1]; acc[2] += w * labs[j][2];
+    }
+    targets.push(wsum ? [acc[0] / wsum, acc[1] / wsum, acc[2] / wsum] : labs[i].slice());
+  }
+  return targets;
+}
+
+// grade straight from the cached OKLab buffer -- no forward conversion
+function gradeImage(item, actualLab, targetLab, strength) {
+  const { lab, w, h } = item.editLab;
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const imgData = ctx.createImageData(w, h);
+  const d = imgData.data;
+
+  const lRatio = 1 + strength * ((targetLab[0] / Math.max(actualLab[0], 1e-4)) - 1);
+  const da = strength * (targetLab[1] - actualLab[1]);
+  const db = strength * (targetLab[2] - actualLab[2]);
+
+  for (let j = 0, i = 0; j < lab.length; j += 3, i += 4) {
+    const out = oklabToRgb(lab[j] * lRatio, lab[j + 1] + da, lab[j + 2] + db);
+    d[i]     = Math.max(0, Math.min(255, Math.round(out[0] * 255)));
+    d[i + 1] = Math.max(0, Math.min(255, Math.round(out[1] * 255)));
+    d[i + 2] = Math.max(0, Math.min(255, Math.round(out[2] * 255)));
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return cv;
+}
+
+// ================= demo strip =================
+
+// const DEMO_COLORS = ['#e8434a','#2a78d6','#f5e04b','#e87ba4','#7f77dd','#d85a30',
+//                     '#8fef8f','#9adfe8','#ffb454','#3bc48d','#f2a7c3'];
+
+const BASE_COLORS = ['#e8434a','#2a78d6','#f5e04b','#e87ba4','#7f77dd','#d85a30',
+                     '#8fef8f','#9adfe8','#ffb454','#3bc48d','#f2a7c3'];
+
+const SOFTEN = 0.28;   // same mix the shine and fireworks use
+const DEMO_COLORS = BASE_COLORS.map(hex => {
+  const int = parseInt(hex.slice(1), 16);
+  const c = [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+  return '#' + c
+    .map(v => Math.round(v + (255 - v) * SOFTEN).toString(16).padStart(2, '0'))
+    .join('');
+});
+
+// One shared colour scheme: the shine and the fireworks use the ACTUAL bar
+// colours, not just their hues, so everything on the page matches exactly.
+function hexToRgbArr(hex) {
+  const int = parseInt(hex.slice(1), 16);
+  return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+}
+
+function rgb2hue(hex) {
+  const [R, G, B] = hexToRgbArr(hex);
+  const r = R / 255, g = G / 255, b = B / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (!d) return 0;
+  let h;
+  if (mx === r)      h = ((g - b) / d) % 6;
+  else if (mx === g) h = (b - r) / d + 2;
+  else               h = (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+// the palette, ordered around the colour wheel
+const PALETTE = DEMO_COLORS
+  .slice()
+  .sort((a, b) => rgb2hue(a) - rgb2hue(b))
+  .map(hexToRgbArr);
+
+function initDemo() {
+  const demo = document.getElementById('demo');
+  const n = DEMO_COLORS.length;
+  const wPct = 100 / n;
+
+  const labs = DEMO_COLORS.map(hx => {
+    const int = parseInt(hx.slice(1), 16);
+    return rgbToOklab(((int >> 16) & 255) / 255, ((int >> 8) & 255) / 255, (int & 255) / 255);
+  });
+  const D = labs.map(a => labs.map(b => dist(a, b)));
+  let start = 0;
+  for (let i = 1; i < n; i++) if (labs[i][0] < labs[start][0]) start = i;
+  let order = twoOpt(nearestNeighborPath(D, start, n), D);
+  if (order[order.length - 1] === start) order.reverse();
+  const sortedPos = new Array(n);
+  order.forEach((idx, pos) => sortedPos[idx] = pos);
+
+  const shuffled = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const blocks = DEMO_COLORS.map((hx, i) => {
+    const b = document.createElement('div');
+    b.className = 'blk';
+    b.style.background = hx;
+    b.style.width = wPct + '%';
+    b.style.left = (shuffled.indexOf(i) * wPct) + '%';
+    demo.appendChild(b);
+    return b;
+  });
+
+  let sorted = false;
+  const label = document.getElementById('demoLabel');
+  const titleEl = document.getElementById('titleShine');
+
+  // Build a dithered white band: a solid core that dissolves into
+  // scattered pixels at both edges. Drawn tiny, then scaled up with
+  // image-rendering:pixelated so every cell is a big hard square.
+  // HSL -> RGB (0..1 in, 0..255 out)
+  function hsl2rgb(h, s, l) {
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+  }
+
+  function buildShineImage() {
+    const W = 300, H = 14;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(W, H);
+    const d = img.data;
+
+    const cx = W * 0.5, half = W * 0.28, core = 0.30;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const dd = Math.abs(x - cx) / half;
+        let p = dd < core ? 1 : Math.max(0, 1 - (dd - core) / (1 - core));
+        p = p * p;                          // sharpen the falloff
+        const on = Math.random() < p;
+        const i = (y * W + x) * 4;
+
+        // use the exact bar colour for this position along the band
+        const t = Math.min(0.999, Math.max(0, (x - (cx - half)) / (2 * half)));
+        const [pr, pg, pb] = PALETTE[Math.floor(t * PALETTE.length)];
+        // lift toward white only slightly at the core, so it still reads as a glint
+        // mix toward white: a soft baseline everywhere, near-white at the core
+        const centre = Math.max(0, 1 - dd);
+        const lift = 0.26 + centre * centre * 0.30;
+        const r = Math.round(pr + (255 - pr) * lift);
+        const g = Math.round(pg + (255 - pg) * lift);
+        const b = Math.round(pb + (255 - pb) * lift);
+
+        d[i] = r; d[i + 1] = g; d[i + 2] = b;
+        d[i + 3] = on ? 255 : 0;            // dither via alpha
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv.toDataURL();
+  }
+
+  // ---------- pixel fireworks ----------
+  // Two bursts of chunky square particles: upper-left and lower-right
+  // of the title. Positions snap to a grid so everything stays pixel-y.
+  const PX = 3;                    // particle size / grid step, in css px
+  const fxCanvas = document.getElementById('fxCanvas');
+  let fxParticles = [], fxRaf = null;
+
+  function fxResize() {
+    if (!fxCanvas) return null;
+    const r = fxCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    fxCanvas.width = Math.round(r.width * dpr);
+    fxCanvas.height = Math.round(r.height * dpr);
+    const ctx = fxCanvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, r };
+  }
+
+  function spawnBurst(cx, cy, count, colors) {
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 0.14 + Math.random() * 1.18;
+      fxParticles.push({
+        x: cx, y: cy,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 0.5,     // slight upward bias
+        life: 1,
+        decay: 0.0145 + Math.random() * 0.0135,
+        // an exact bar colour
+        c: colors[Math.floor(Math.random() * colors.length)]
+      });
+    }
+  }
+
+  function fxTick() {
+    const ctx = fxCanvas.getContext('2d');
+    const w = fxCanvas.width / (window.devicePixelRatio || 1);
+    const h = fxCanvas.height / (window.devicePixelRatio || 1);
+    ctx.clearRect(0, 0, w, h);
+
+    for (const p of fxParticles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.035;          // gravity
+      p.vx *= 0.9895;         // drag
+      p.life -= p.decay;
+      if (p.life <= 0) continue;
+
+      // snap to the pixel grid, and step the alpha so it fades in chunks
+      const gx = Math.round(p.x / PX) * PX;
+      const gy = Math.round(p.y / PX) * PX;
+      const a = Math.ceil(p.life * 5) / 5;
+      ctx.fillStyle = 'rgba(' + p.c[0] + ',' + p.c[1] + ',' + p.c[2] + ',' + a + ')';
+      ctx.fillRect(gx, gy, PX, PX);
+    }
+
+    fxParticles = fxParticles.filter(p => p.life > 0);
+    if (fxParticles.length) {
+      fxRaf = requestAnimationFrame(fxTick);
+    } else {
+      ctx.clearRect(0, 0, w, h);
+      fxRaf = null;
+    }
+  }
+
+  function fireworks() {
+    if (!fxCanvas || !titleEl) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const setup = fxResize();
+    if (!setup) return;
+
+    // find the title's corners in canvas-local coordinates
+    const tr = titleEl.getBoundingClientRect();
+    const cr = setup.r;
+    const left = tr.left - cr.left;
+    const right = tr.right - cr.left;
+    const top = tr.top - cr.top;
+    const bottom = tr.bottom - cr.top;
+
+    // tight hue families so each burst reads as one colour:
+    // pinks (no reds) upper-left, blues/cyans (no greens) lower-right
+    const pick = (lo, hi) => DEMO_COLORS
+      .filter(hx => { const h = rgb2hue(hx); return h >= lo && h <= hi; })
+      .map(hexToRgbArr);
+
+    // build lighter/darker tints so a narrow family still has variety
+    const tints = arr => arr.flatMap(([r, g, b]) => [
+      [r, g, b],
+      [Math.round(r + (255 - r) * 0.10), Math.round(g + (255 - g) * 0.10), Math.round(b + (255 - b) * 0.10)],
+      [Math.round(r * 0.82), Math.round(g * 0.82), Math.round(b * 0.82)]
+    ]);
+
+    const pinks = tints(pick(300, 350));
+    const blues = tints(pick(175, 200));
+    spawnBurst(left - 6, top - 4, 30, pinks.length ? pinks : PALETTE);
+    spawnBurst(right + 6, bottom + 4, 30, blues.length ? blues : PALETTE);
+
+    if (!fxRaf) fxRaf = requestAnimationFrame(fxTick);
+  }
+
+  function triggerShine() {
+    if (!titleEl) return;
+    // regenerate so the dither reshuffles each pass
+    titleEl.style.setProperty('--shine-img', 'url(' + buildShineImage() + ')');
+    titleEl.classList.remove('sweep');
+    void titleEl.offsetWidth;      // restart the animation
+    titleEl.classList.add('sweep');
+    setTimeout(fireworks, 950);    // fire as the .95s sweep finishes
+  }
+
+  function toggle() {
+    sorted = !sorted;
+    blocks.forEach((b, i) => {
+      const pos = sorted ? sortedPos[i] : shuffled.indexOf(i);
+      b.style.left = (pos * wPct) + '%';
+    });
+    // shine sweeps in lockstep with the tiles sliding
+    if (sorted) triggerShine();
+  }
+  setTimeout(toggle, 1490);           // fires the moment the cascade finishes
+  demo.style.cursor = 'pointer';
+  demo.onclick = toggle;              // click to replay
+  demo.title = 'click to shuffle / sort';
+}
+initDemo();
+
+// ---------- page load cascade, top to bottom ----------
+[
+  document.querySelector('h1.masthead'),
+  document.querySelector('.demofig'),
+  document.querySelector('.panel'),
+  document.getElementById('controls'),
+  document.getElementById('strips'),
+  document.getElementById('grid'),
+  document.getElementById('carouselTitle'),
+  document.getElementById('carouselWrap'),
+  document.querySelector('.hint')
+].filter(Boolean).forEach((el, i) => {
+  el.classList.add('load-in');
+  el.style.animationDelay = (i * 105) + 'ms';
+});
+
+// ================= slider <-> number sync =================
+
+const PARAMS = ['sigma', 'thresh', 'strength', 'refPull'];
+for (const p of PARAMS) {
+  const range = document.getElementById(p);
+  const num = document.getElementById(p + 'N');
+  // Format: pad to the step's decimals so intermediate values read as floats
+  // (2 -> "2.0"), but leave the two endpoints plain (0, 4).
+  const DEC = (String(range.step).split('.')[1] || '').length;
+  const LO = parseFloat(range.min), HI = parseFloat(range.max);
+  const fmt = v => {
+    const n = parseFloat(v);
+    if (n === LO || n === HI) return String(n);      // endpoints stay short
+    return n.toFixed(DEC);
+  };
+  num.value = fmt(range.value);
+
+  // Typewriter tick. The scramble runs ONLY when the drag ends -- while you're
+  // dragging the number updates instantly, so it can never feel behind.
+  const GLYPHS = '0123456789';
+  let tickTimer = null;
+
+  const scramble = t => t.replace(/[0-9]/g, () => GLYPHS[Math.floor(Math.random() * 10)]);
+
+  const tick = target => {
+    const finalStr = fmt(target);
+    clearInterval(tickTimer);
+    let step = 0;
+    num.classList.add('ticking');
+    tickTimer = setInterval(() => {
+      step++;
+      if (step >= 3) {                               // settle on the real value
+        clearInterval(tickTimer);
+        num.value = finalStr;
+        num.classList.remove('ticking');
+      } else {
+        num.value = scramble(finalStr);
+      }
+    }, 30);
+  };
+
+  range.addEventListener('input', () => {
+    clearInterval(tickTimer);                        // no scramble mid-drag
+    num.classList.remove('ticking');
+    num.value = fmt(range.value);                    // instant, zero lag
+    scheduleRender();
+  });
+
+  // the tick fires on release, as a little "landed" flourish
+  const settle = () => tick(range.value);
+  range.addEventListener('pointerup', settle);
+  range.addEventListener('change', settle);          // keyboard arrows too
+  num.addEventListener('change', () => {
+    let v = parseFloat(num.value);
+    if (isNaN(v)) v = parseFloat(range.value);
+    v = Math.max(parseFloat(range.min), Math.min(parseFloat(range.max), v));
+    range.value = v;
+    tick(v);
+    scheduleRender();
+  });
+}
+function param(p) { return parseFloat(document.getElementById(p).value); }
+
+// Debounce: cheap parts of render run immediately via the light pass,
+// heavy per-pixel grading waits until the slider goes quiet.
+let renderTimer = null;
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(render, 150);
+}
+
+// ================= context menu =================
+
+const ctxMenu = document.getElementById('ctxMenu');
+let ctxOpenedAt = 0;
+
+function closeMenu() { ctxMenu.classList.remove('open'); }
+
+function openMenu(x, y, r) {
+  ctxOpenedAt = performance.now();
+  const graded = !!r.canvas;
+  ctxMenu.innerHTML = '';
+
+  const head = document.createElement('div');
+  head.className = 'ctxhead';
+  head.textContent = r.it.name + (graded ? '' : ' — not graded (already fits)');
+  ctxMenu.appendChild(head);
+
+  const add = (label, note, fn) => {
+    const b = document.createElement('button');
+    b.innerHTML = label + (note ? '<span class="k">' + note + '</span>' : '');
+    b.onclick = () => { closeMenu(); fn(); };
+    ctxMenu.appendChild(b);
+  };
+
+  if (graded) {
+    add('download graded', '', () => downloadResult(r));
+    add('download unedited', '', () => downloadOriginal(r));
+  } else {
+    add('download image', '', () => downloadOriginal(r));
+  }
+  add('open larger', '', () => openLightbox(r));
+  add(r.isRef ? 'unset reference' : 'set as reference', '', () => setReference(r.idx));
+  add('copy hex', r.newHex, () => {
+    navigator.clipboard.writeText(r.newHex);
+    setStatus('copied ' + r.newHex);
+  });
+
+  // show off-screen first so we can measure it, then clamp into the viewport
+  ctxMenu.classList.add('open');
+  ctxMenu.style.left = '-9999px';
+  const w = ctxMenu.offsetWidth, h = ctxMenu.offsetHeight;
+  ctxMenu.style.left = Math.min(x, window.innerWidth - w - 8) + 'px';
+  ctxMenu.style.top = Math.min(y, window.innerHeight - h - 8) + 'px';
+}
+
+document.addEventListener('pointerdown', e => {
+  // ignore the tail of the very press that opened it
+  if (performance.now() - ctxOpenedAt < 350) return;
+  if (!ctxMenu.contains(e.target)) closeMenu();
+}, true);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+window.addEventListener('scroll', closeMenu, true);
+window.addEventListener('resize', closeMenu);
+
+// ================= single-image download =================
+
+function downloadResult(r) {
+  if (!r) return;
+  const base = r.it.name.replace(/\.[^.]+$/, '');
+  if (r.canvas) {
+    r.canvas.toBlob(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'graded_' + base + '.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+    setStatus('saving graded_' + base + '.png');
+  } else {
+    downloadOriginal(r);
+  }
+}
+
+function downloadOriginal(r) {
+  const a = document.createElement('a');
+  a.href = r.it.url;
+  a.download = r.it.name;
+  a.click();
+  setStatus('saving ' + r.it.name);
+}
+
+// Long-press (touch) + right-click (mouse) -> open the menu for that image.
+// getResult(e) returns the result object under the pointer, or null.
+// Returns a didFire() probe so a click handler can skip itself after a press.
+function attachDownloadGesture(el, getResult) {
+  let timer = null, sx = 0, sy = 0, fired = false;
+  const cancel = () => { clearTimeout(timer); timer = null; };
+
+  el.addEventListener('contextmenu', e => {
+    const r = getResult(e);
+    if (!r) return;
+    e.preventDefault();          // our menu replaces the browser's
+    openMenu(e.clientX, e.clientY, r);
+  });
+
+  el.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse') return;   // mouse uses right-click instead
+    fired = false;
+    sx = e.clientX; sy = e.clientY;
+    const r = getResult(e);
+    if (!r) return;
+    timer = setTimeout(() => {
+      fired = true;
+      if (navigator.vibrate) navigator.vibrate(15);
+      openMenu(sx, sy, r);
+    }, 500);
+  });
+
+  // any real movement means they meant to scroll/drag, not press
+  el.addEventListener('pointermove', e => {
+    if (timer && Math.hypot(e.clientX - sx, e.clientY - sy) > 8) cancel();
+  });
+  el.addEventListener('pointerup', cancel);
+  el.addEventListener('pointercancel', cancel);
+
+  return () => fired;
+}
+
+// ================= state + UI =================
+
+let items = [];
+let refIdx = null;
+
+function setReference(idx) {
+  refIdx = (refIdx === idx) ? null : idx;
+  render();
+}
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); };
+fileInput.onchange = e => addFiles(e.target.files);
+
+function setStatus(t) { document.getElementById('status').textContent = t; }
+
+async function addFiles(fileList) {
+  const files = [...fileList].filter(f => f.type.startsWith('image/'));
+  if (!files.length) return;
+  setStatus('reading ' + files.length + ' image(s)...');
+  for (const f of files) {
+    const url = URL.createObjectURL(f);
+    const img = await new Promise(res => {
+      const im = new Image();
+      im.onload = () => res(im); im.onerror = () => res(null); im.src = url;
+    });
+    if (!img) continue;
+    items.push({ url, img, name: f.name, px: samplePixels(img), editLab: precomputeEditLab(img) });
+  }
+  recompute();
+}
+
+function recompute() {
+  if (!items.length) return;
+  const mode = document.getElementById('mode').value;
+  for (const it of items) {
+    it.rgb = mode === 'dominant' ? dominantColor(it.px) : averageColor(it.px);
+    it.lab = rgbToOklab(it.rgb[0], it.rgb[1], it.rgb[2]);
+    it.hex = toHex(it.rgb);
+  }
+  render();
+}
+document.getElementById('mode').addEventListener('change', recompute);
+
+function render() {
+  const sigma = param('sigma'), thresh = param('thresh');
+  const strength = param('strength'), refPull = param('refPull');
+
+  const grid = document.getElementById('grid');
+  const strips = document.getElementById('strips');
+  grid.innerHTML = ''; strips.innerHTML = '';
+  if (!items.length) { setStatus('waiting for images'); return; }
+
+  // 1. sort (reference anchors the path start when set)
+  const n = items.length;
+  let order = [...items.keys()];
+  if (n > 1) {
+    const D = Array.from({length: n}, (_, i) =>
+      Array.from({length: n}, (_, j) => dist(items[i].lab, items[j].lab)));
+    const hasRef = refIdx !== null && refIdx < n;
+    let start = hasRef
+      ? refIdx
+      : items.reduce((bi, it, i) => it.lab[0] < items[bi].lab[0] ? i : bi, 0);
+    order = twoOpt(nearestNeighborPath(D, start, n), D);
+    if (order[order.length - 1] === start) order.reverse();
+    if (hasRef && order[0] !== refIdx) order = [refIdx, ...order.filter(i => i !== refIdx)];
+  }
+
+  // 2. fit targets, bend toward reference
+  const labs = order.map(i => items[i].lab);
+  const targets = fitTargets(labs, sigma);
+  const refLab = (refIdx !== null && items[refIdx]) ? items[refIdx].lab : null;
+  if (refLab && refPull > 0) {
+    for (let p = 0; p < targets.length; p++) {
+      if (order[p] === refIdx) { targets[p] = refLab.slice(); continue; }
+      targets[p] = [
+        targets[p][0] + refPull * 0.25 * (refLab[0] - targets[p][0]),
+        targets[p][1] + refPull * (refLab[1] - targets[p][1]),
+        targets[p][2] + refPull * (refLab[2] - targets[p][2])
+      ];
+    }
+  }
+
+  // 3. grade
+  let edited = 0;
+  const results = order.map((idx, pos) => {
+    const it = items[idx];
+    const isRef = idx === refIdx;
+    const dev = dist(it.lab, targets[pos]);
+    const isOut = !isRef && strength > 0 && n > 2 &&
+                  (refLab && refPull > 0 ? dev > 0.002 : dev > thresh);
+    let canvas = null, newHex = it.hex;
+    if (isOut) {
+      canvas = gradeImage(it, it.lab, targets[pos], strength);
+      const s = document.createElement('canvas');
+      s.width = SAMPLE; s.height = SAMPLE;
+      s.getContext('2d').drawImage(canvas, 0, 0, SAMPLE, SAMPLE);
+      const sd = s.getContext('2d').getImageData(0, 0, SAMPLE, SAMPLE).data;
+      const px = [];
+      for (let i = 0; i < sd.length; i += 4) px.push([sd[i] / 255, sd[i+1] / 255, sd[i+2] / 255]);
+      newHex = toHex(averageColor(px));
+      edited++;
+    }
+    return { it, idx, isRef, dev, isOut, canvas, newHex };
+  });
+
+  // 4. strips
+  const mk = (label, key) => {
+    const lab = document.createElement('div');
+    lab.className = 'striplabel'; lab.textContent = label;
+    const st = document.createElement('div');
+    st.className = 'strip';
+    results.forEach(r => {
+      const d = document.createElement('div');
+      d.style.background = key === 'before' ? r.it.hex : r.newHex;
+      st.appendChild(d);
+    });
+    strips.appendChild(lab); strips.appendChild(st);
+  };
+  const title = document.createElement('div');
+  title.className = 'panel-title'; title.innerHTML = '<b>02</b> Gradient';
+  strips.appendChild(title);
+  mk('before', 'before');
+  mk('after', 'after');
+  const gtitle = document.createElement('div');
+  gtitle.className = 'panel-title'; gtitle.style.marginTop = '18px';
+  gtitle.innerHTML = '<b>03</b> Photos';
+  strips.appendChild(gtitle);
+
+  // 5. tiles
+  results.forEach((r, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (r.isRef ? ' reference' : (r.isOut ? ' edited' : ''));
+    cell.style.animationDelay = Math.min(i * 25, 400) + 'ms';
+    cell.title = r.isRef ? 'click to unset reference' : 'click to use as reference';
+    const pressed = attachDownloadGesture(cell, () => r);
+    cell.onclick = () => { if (pressed()) return; setReference(r.idx); };
+    if (r.canvas) {
+      r.canvas.style.width = '140px'; r.canvas.style.height = '140px';
+      cell.appendChild(r.canvas);
+    } else {
+      const im = document.createElement('img'); im.src = r.it.url; cell.appendChild(im);
+    }
+    const bars = document.createElement('div');
+    bars.className = 'bars';
+    bars.innerHTML = '<div style="background:' + r.it.hex + '"></div>' +
+                     '<div style="background:' + r.newHex + '"></div>';
+    cell.appendChild(bars);
+    const info = document.createElement('div');
+    info.className = 'info';
+    info.innerHTML = 'dev ' + r.dev.toFixed(3) +
+      (r.isRef ? ' <span class="tag ref">[reference]</span>'
+               : (r.isOut ? ' <span class="tag">[graded]</span>' : ''));
+    cell.appendChild(info);
+    grid.appendChild(cell);
+  });
+
+  window._results = results;
+  buildCarousel(results);
+  setStatus(n + ' images · ' + edited + ' graded · ' +
+    (refIdx !== null ? 'adapting to reference' : 'click a tile to set a reference'));
+}
+
+// ================= carousel =================
+
+const CAR_H = 320;
+let carCurrent = 0, carTarget = 0, carLoopW = 0, carRaf = null;
+let carDragging = false, carLastX = 0, carLastT = 0, carVel = 0;
+
+function buildCarousel(results) {
+  const track = document.getElementById('track');
+  track.innerHTML = '';
+  carCurrent = 0; carTarget = 0; carVel = 0;
+  if (!results.length) return;
+
+  const srcs = results.map(r => r.canvas ? r.canvas.toDataURL() : r.it.url);
+  const dims = results.map(r => {
+    const im = r.canvas || r.it.img;
+    return Math.max(60, Math.round(CAR_H * (im.width / im.height)));
+  });
+
+  const oneLoop = dims.reduce((a, b) => a + b, 0);
+  const reps = Math.max(3, Math.ceil((window.innerWidth * 2) / oneLoop) + 1);
+  for (let rep = 0; rep < reps; rep++) {
+    srcs.forEach((src, i) => {
+      const im = document.createElement('img');
+      im.src = src;
+      im.style.width = dims[i] + 'px';
+      im.dataset.ri = i;          // which result this tile shows
+      im.draggable = false;
+      track.appendChild(im);
+    });
+  }
+  carLoopW = oneLoop;
+  if (!carRaf) carRaf = requestAnimationFrame(carTick);
+}
+
+function carTick() {
+  carCurrent += (carTarget - carCurrent) * 0.14;
+  if (carLoopW > 0) {
+    while (carCurrent > carLoopW) { carCurrent -= carLoopW; carTarget -= carLoopW; }
+    while (carCurrent < 0)        { carCurrent += carLoopW; carTarget += carLoopW; }
+  }
+  const track = document.getElementById('track');
+  if (track) track.style.transform = 'translate3d(' + (-carCurrent) + 'px,0,0)';
+  if (!carDragging && Math.abs(carVel) > 0.1) {
+    carTarget += carVel;
+    carVel *= 0.94;
+  }
+  carRaf = requestAnimationFrame(carTick);
+}
+
+const carWrap = document.getElementById('carouselWrap');
+carWrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const d = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+  carTarget += d * 1.15;
+  carVel = 0;
+}, { passive: false });
+carWrap.addEventListener('pointerdown', e => {
+  carDragging = true; carLastX = e.clientX; carLastT = performance.now(); carVel = 0;
+  carWrap.setPointerCapture(e.pointerId);
+});
+carWrap.addEventListener('pointermove', e => {
+  if (!carDragging) return;
+  const dx = e.clientX - carLastX;
+  const now = performance.now();
+  const dt = Math.max(1, now - carLastT);
+  carTarget -= dx; carCurrent -= dx;
+  carVel = -dx / dt * 14;
+  carLastX = e.clientX; carLastT = now;
+});
+function endDrag() { carDragging = false; }
+carWrap.addEventListener('pointerup', endDrag);
+carWrap.addEventListener('pointercancel', endDrag);
+
+// ================= lightbox =================
+
+const lightbox = document.getElementById('lightbox');
+const lbImg = document.getElementById('lbImg');
+const lbCaption = document.getElementById('lbCaption');
+
+const lbCount = document.getElementById('lbCount');
+let lbIndex = -1;
+
+function lbSrc(r) { return r.canvas ? r.canvas.toDataURL() : r.it.url; }
+
+function paintLightbox(r) {
+  lbImg.src = lbSrc(r);
+  lbCaption.textContent = r.it.name + (r.canvas ? '  ·  graded' : '');
+  const total = (window._results || []).length;
+  lbCount.textContent = total ? (lbIndex + 1) + ' / ' + total : '';
+}
+
+function openLightbox(r) {
+  if (!r) return;
+  lbIndex = (window._results || []).indexOf(r);
+  paintLightbox(r);
+  lightbox.classList.add('open');
+  void lightbox.offsetWidth;          // let display:flex land before fading in
+  lightbox.classList.add('shown');
+}
+
+function lbStep(delta) {
+  const rs = window._results || [];
+  if (rs.length < 2 || lbIndex < 0) return;
+  lbIndex = (lbIndex + delta + rs.length) % rs.length;
+  paintLightbox(rs[lbIndex]);
+}
+
+function closeLightbox() {
+  lightbox.classList.remove('shown');
+  setTimeout(() => lightbox.classList.remove('open'), 220);
+}
+
+document.getElementById('lbPrev').addEventListener('click', e => {
+  e.stopPropagation();               // don't let the backdrop handler close it
+  lbStep(-1);
+});
+document.getElementById('lbNext').addEventListener('click', e => {
+  e.stopPropagation();
+  lbStep(1);
+});
+
+lightbox.addEventListener('click', e => {
+  if (e.target === lbImg) return;     // clicking the photo itself keeps it open
+  closeLightbox();
+});
+document.getElementById('lbClose').addEventListener('click', closeLightbox);
+document.addEventListener('keydown', e => {
+  if (!lightbox.classList.contains('open')) return;
+  if (e.key === 'Escape') closeLightbox();
+  else if (e.key === 'ArrowRight') lbStep(1);
+  else if (e.key === 'ArrowLeft') lbStep(-1);
+});
+
+// click a carousel photo to open it larger.
+// a click only counts if the pointer barely moved -- otherwise it was a drag
+let clickX = 0, clickY = 0;
+carWrap.addEventListener('pointerdown', e => { clickX = e.clientX; clickY = e.clientY; });
+carWrap.addEventListener('click', e => {
+  if (Math.hypot(e.clientX - clickX, e.clientY - clickY) > 6) return;
+  const t = e.target;
+  if (!t || t.tagName !== 'IMG' || t.dataset.ri === undefined) return;
+  openLightbox((window._results || [])[+t.dataset.ri]);
+});
+
+// long-press / right-click a carousel tile to save just that image
+attachDownloadGesture(carWrap, e => {
+  const t = e.target;
+  if (!t || t.tagName !== 'IMG' || t.dataset.ri === undefined) return null;
+  return (window._results || [])[+t.dataset.ri] || null;
+});
+
+// ================= misc =================
+
+function downloadAll() {
+  const rs = window._results || [];
+  const outs = rs.filter(r => r.canvas);
+  if (!outs.length) { setStatus('nothing was graded -- lower sensitivity, or set a reference'); return; }
+  outs.forEach((r, i) => {
+    setTimeout(() => {
+      r.canvas.toBlob(blob => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'graded_' + r.it.name.replace(/\.[^.]+$/, '') + '.png';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      });
+    }, i * 300);
+  });
+}
+
+function reset() {
+  for (const it of items) URL.revokeObjectURL(it.url);
+  items = [];
+  refIdx = null;
+  document.getElementById('grid').innerHTML = '';
+  document.getElementById('strips').innerHTML = '';
+  document.getElementById('track').innerHTML = '';
+  carLoopW = 0; carCurrent = 0; carTarget = 0; carVel = 0;
+  setStatus('waiting for images');
+}
+</script>
+</body>
+</html>
