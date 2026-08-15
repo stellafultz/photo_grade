@@ -7,13 +7,10 @@ Sorts a set of photos into a perceptually smooth color gradient. Option to autom
 ## What it does
 
 1. **Extracts** a representative color from each photo.
-2. **Sorts** them by solving the open Traveling Salesman Path in OKLab
-   space — nearest-neighbor construction refined with 2-opt — so adjacent
-   photos are always the closest perceptual match.
-3. **Fits** a smooth trajectory through the sorted sequence. Each photo's
-   target color is a Gaussian-weighted average of its neighbors,
-   *excluding itself*, so outliers actually register as outliers.
-4. **Grades** the photos that deviate past a threshold, scaling lightness
+2. **Sorts** them by minimizing the total perceptual distance between neighbors.
+3. **Identifies** outliers by comparing each photo's color to the average of its neighbors,
+   flagging any photo whose gap exceeds the sensitivity threshold.
+5. **Grades** the photos that deviate past the sensitivity threshold, scaling lightness
    and shifting chroma in OKLab to pull them onto the curve.
 
 Optionally, pick a reference photo and the whole set adapts to its color
