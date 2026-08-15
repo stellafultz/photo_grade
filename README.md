@@ -1,3 +1,5 @@
+<img src="header.svg" width="100%" alt="">
+
 # photo_grade
 
 Sorts a set of photos into a perceptually smooth color gradient. Option to automatically color grade outliers to improve gradient flow.
