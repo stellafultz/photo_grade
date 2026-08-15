@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 90" width="1200" height="90" role="img" aria-label="photo_grade colour gradient">
+  <defs>
+    <clipPath id="r"><rect x="0" y="0" width="1200" height="90" rx="12" ry="12"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect x="0.00" y="0" width="109.59" height="90" fill="#669ee1"/>
+    <rect x="109.09" y="0" width="109.59" height="90" fill="#a39de7"/>
+    <rect x="218.18" y="0" width="109.59" height="90" fill="#72d5ad"/>
+    <rect x="327.27" y="0" width="109.59" height="90" fill="#b6e8ee"/>
+    <rect x="436.36" y="0" width="109.59" height="90" fill="#aef3ae"/>
+    <rect x="545.45" y="0" width="109.59" height="90" fill="#f8e97d"/>
+    <rect x="654.55" y="0" width="109.59" height="90" fill="#ffc984"/>
+    <rect x="763.64" y="0" width="109.59" height="90" fill="#f6c0d4"/>
+    <rect x="872.73" y="0" width="109.59" height="90" fill="#eea0bd"/>
+    <rect x="981.82" y="0" width="109.59" height="90" fill="#e3886a"/>
+    <rect x="1090.91" y="0" width="109.59" height="90" fill="#ee787d"/>
+  </g>
+</svg>
