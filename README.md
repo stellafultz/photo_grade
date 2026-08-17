@@ -21,8 +21,8 @@ character while keeping its own lightness range.
 ## Usage & Controls
 
 - Click a photo to set it as the color reference
-- Right-click (or long-press) any photo for options — open larger,
-  download graded, download unedited, copy hex
+- Right-click (or long-press) any photo for options (open larger,
+  download graded, download unedited, copy hex)
 - Scroll or drag the carousel
 
 | | |
